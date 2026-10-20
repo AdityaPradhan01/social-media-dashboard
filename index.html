@@ -1,0 +1,441 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Pulseboard</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: sticky control bar → KPI strip → 2-col analytic grid (charts left, feed right) → stacks to 1 col on phones */
+:root{
+  --bg:#f3f5f9; --panel:#ffffff; --line:#dfe4ee; --fg:#141a29; --muted:#5b6478;
+  --accent:#2f56d0; --accent-soft:#e6ecfc;
+  --pos:#14845a; --neg:#c23a3a; --neu:#8a91a3; --warn:#b86e00;
+  --p1:#2f56d0; --p2:#c2408f; --p3:#d0571b; --p4:#0e7c86; --p5:#7a52c7;
+  --font-body:"Figtree",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --font-data:"JetBrains Mono",ui-monospace,"SFMono-Regular",Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0e121b; --panel:#161c29; --line:#283043; --fg:#e7ebf4; --muted:#97a0b5;
+  --accent:#7d9bff; --accent-soft:#1f2a47;
+  --pos:#3ccf8e; --neg:#ff7272; --neu:#8f97ab; --warn:#f0a43a;
+  --p1:#7d9bff; --p2:#f07ac0; --p3:#ff8f57; --p4:#3cc4cf; --p5:#b597ff; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0e121b; --panel:#161c29; --line:#283043; --fg:#e7ebf4; --muted:#97a0b5;
+  --accent:#7d9bff; --accent-soft:#1f2a47;
+  --pos:#3ccf8e; --neg:#ff7272; --neu:#8f97ab; --warn:#f0a43a;
+  --p1:#7d9bff; --p2:#f07ac0; --p3:#ff8f57; --p4:#3cc4cf; --p5:#b597ff; color-scheme:dark}
+*{box-sizing:border-box}
+html,body{margin:0}img{max-width:100%}[hidden]{display:none!important}
+body{background:var(--bg);color:var(--fg);font-family:var(--font-body);font-size:14px;line-height:1.45;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:0 32px}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--bg)}
+.wrap{max-width:1320px;margin:0 auto;display:flex;flex-direction:column;gap:14px}
+header{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg);padding-block:14px 10px;border-bottom:1px solid var(--line);display:flex;flex-wrap:wrap;gap:12px 20px;align-items:center;justify-content:space-between}
+.brand{display:flex;align-items:center;gap:10px;min-width:0}
+.brand h1{font-size:20px;margin:0;font-weight:700;letter-spacing:-.01em;text-wrap:balance}
+.live{display:inline-flex;align-items:center;gap:6px;font:600 11px var(--font-data);letter-spacing:.08em;text-transform:uppercase;color:var(--pos);border:1px solid currentColor;border-radius:999px;padding:2px 9px}
+.live i{width:7px;height:7px;border-radius:50%;background:currentColor;animation:blink 1.2s infinite}
+.live.off{color:var(--muted)} .live.off i{animation:none}
+@keyframes blink{50%{opacity:.25}}
+@media (prefers-reduced-motion:reduce){.live i{animation:none}}
+.sub{color:var(--muted);font-size:12.5px}
+.controls{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+button,select,input{font:inherit;color:var(--fg)}
+.btn{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:6px 12px;cursor:pointer;font-weight:600}
+.btn:hover{border-color:var(--accent)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--panel)}
+.btn:focus-visible,.chip:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+select,input[type=text]{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:6px 10px}
+.filters{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.chip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--panel);border-radius:999px;padding:4px 11px;cursor:pointer;font-weight:600;font-size:13px}
+.chip .sw{width:9px;height:9px;border-radius:2px}
+.chip[aria-pressed=false]{opacity:.45}
+.kw{display:inline-flex;align-items:center;gap:4px;background:var(--accent-soft);color:var(--accent);border-radius:999px;padding:3px 6px 3px 10px;font-weight:600;font-size:13px}
+.kw button{border:0;background:none;color:inherit;cursor:pointer;font-size:14px;line-height:1;padding:0 4px}
+.kpis{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px}
+.kpi{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 14px;min-width:0}
+.kpi .l{font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.kpi .v{font:600 24px var(--font-data);font-variant-numeric:tabular-nums;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kpi .d{font:12px var(--font-data);color:var(--muted);margin-top:2px}
+.up{color:var(--pos)!important}.down{color:var(--neg)!important}
+.grid{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr);gap:14px;align-items:start}
+.col{display:flex;flex-direction:column;gap:14px;min-width:0}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 16px;min-width:0}
+.card h2{font-size:14px;margin:0 0 2px;font-weight:700}
+.card .hint{font-size:12px;color:var(--muted);margin:0 0 10px}
+.row2{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px}
+canvas{display:block;width:100%}
+.legend{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:12px;color:var(--muted);margin-top:8px}
+.legend span{display:inline-flex;align-items:center;gap:5px}
+.legend i{width:10px;height:3px;border-radius:2px;display:inline-block}
+.bars{display:flex;flex-direction:column;gap:8px}
+.bar{display:grid;grid-template-columns:minmax(80px,120px) minmax(0,1fr) 64px;gap:10px;align-items:center;font-size:13px}
+.bar .t{height:10px;background:var(--bg);border-radius:5px;overflow:hidden}
+.bar .t b{display:block;height:100%;border-radius:5px;transition:width .5s}
+.bar .n{font:12px var(--font-data);text-align:right;font-variant-numeric:tabular-nums}
+.bar .nm{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600}
+.sent{display:flex;height:14px;border-radius:7px;overflow:hidden;margin:6px 0 8px}
+.sent div{transition:flex-grow .5s}
+.sentlbl{display:flex;justify-content:space-between;font:12px var(--font-data)}
+.feed{display:flex;flex-direction:column;max-height:690px;overflow-y:auto;margin:0 -16px;padding:0 16px}
+.post{padding:10px 0;border-bottom:1px solid var(--line);display:flex;flex-direction:column;gap:4px;animation:in .35s ease}
+@keyframes in{from{background:var(--accent-soft)}to{background:transparent}}
+@media (prefers-reduced-motion:reduce){.post{animation:none}}
+.post .m{display:flex;gap:8px;align-items:center;font-size:12px;color:var(--muted);flex-wrap:wrap}
+.post .pf{font-weight:700}
+.post .tx{font-size:13.5px;overflow-wrap:anywhere}
+.post .en{font:11.5px var(--font-data);color:var(--muted);display:flex;gap:12px}
+.pill{font:600 10.5px var(--font-data);text-transform:uppercase;letter-spacing:.05em;border-radius:999px;padding:1px 7px;border:1px solid currentColor}
+.pill.pos{color:var(--pos)}.pill.neg{color:var(--neg)}.pill.neu{color:var(--neu)}
+.alerts{display:flex;flex-direction:column;gap:8px}
+.alert{border:1px solid var(--line);border-left:4px solid var(--warn);border-radius:8px;padding:8px 10px;font-size:13px}
+.alert.crit{border-left-color:var(--neg)}
+.alert time{font:11px var(--font-data);color:var(--muted);display:block}
+.empty{color:var(--muted);font-size:13px}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th,td{text-align:left;padding:7px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
+th{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:600}
+td.num,th.num{text-align:right;font-family:var(--font-data);font-variant-numeric:tabular-nums}
+.tw{overflow-x:auto}
+footer{color:var(--muted);font-size:12px;text-align:center}
+@media (max-width:1100px){.kpis{grid-template-columns:repeat(3,minmax(0,1fr))}.grid{grid-template-columns:minmax(0,1fr)}.feed{max-height:480px}}
+@media (max-width:620px){.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.row2{grid-template-columns:minmax(0,1fr)}.kpi .v{font-size:20px}}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+<header>
+  <div class="brand">
+    <div>
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><h1>Pulseboard</h1><span class="live" id="live"><i></i><span id="liveTxt">Live</span></span></div>
+      <div class="sub">Real-time social media monitoring · <span id="clock">--:--:--</span> · updates every second</div>
+    </div>
+  </div>
+  <div class="controls">
+    <button class="btn primary" id="toggle" type="button">Pause</button>
+    <label class="sub" for="speed">Speed</label>
+    <select id="speed"><option value="1">1×</option><option value="2">2×</option><option value="5">5×</option></select>
+    <label class="sub" for="win">Window</label>
+    <select id="win"><option value="60">60 s</option><option value="120">2 min</option><option value="300">5 min</option></select>
+    <button class="btn" id="reset" type="button">Reset</button>
+  </div>
+</header>
+
+<div class="filters" id="pfilters" aria-label="Platforms"></div>
+<div class="filters">
+  <form id="kwForm" style="display:flex;gap:6px">
+    <input type="text" id="kwIn" placeholder="Track a keyword or #hashtag" maxlength="30" aria-label="Keyword to track">
+    <button class="btn" type="submit">Track</button>
+  </form>
+  <div id="kwList" class="filters"></div>
+</div>
+
+<section class="kpis" aria-label="Key metrics">
+  <div class="kpi"><div class="l">Posts / min</div><div class="v" id="k-rate">—</div><div class="d" id="k-rate-d">&nbsp;</div></div>
+  <div class="kpi"><div class="l">Total mentions</div><div class="v" id="k-total">—</div><div class="d" id="k-total-d">since start</div></div>
+  <div class="kpi"><div class="l">Engagements</div><div class="v" id="k-eng">—</div><div class="d" id="k-eng-d">likes + shares + comments</div></div>
+  <div class="kpi"><div class="l">Est. reach</div><div class="v" id="k-reach">—</div><div class="d">impressions in window</div></div>
+  <div class="kpi"><div class="l">Engagement rate</div><div class="v" id="k-er">—</div><div class="d">engagements ÷ reach</div></div>
+  <div class="kpi"><div class="l">Net sentiment</div><div class="v" id="k-ns">—</div><div class="d">% positive − % negative</div></div>
+</section>
+
+<div class="grid">
+  <div class="col">
+    <div class="card">
+      <h2>Mention volume by platform</h2>
+      <p class="hint">Posts per second (5-s rolling mean), stacked by platform.</p>
+      <canvas id="cVol" height="230" aria-label="Stacked area chart of posts per second by platform"></canvas>
+      <div class="legend" id="volLegend"></div>
+    </div>
+    <div class="row2">
+      <div class="card">
+        <h2>Sentiment mix</h2>
+        <p class="hint">Lexicon scoring of each post in the window.</p>
+        <div class="sent" id="sentBar"><div style="background:var(--pos)"></div><div style="background:var(--neu)"></div><div style="background:var(--neg)"></div></div>
+        <div class="sentlbl"><span class="up" id="sPos">—</span><span style="color:var(--neu)" id="sNeu">—</span><span class="down" id="sNeg">—</span></div>
+        <canvas id="cSent" height="120" style="margin-top:12px" aria-label="Net sentiment over time"></canvas>
+        <div class="legend"><span><i style="background:var(--accent)"></i>net sentiment, rolling 10 s</span></div>
+      </div>
+      <div class="card">
+        <h2>Share of voice</h2>
+        <p class="hint">Platform share of mentions in the window.</p>
+        <div class="bars" id="sov"></div>
+      </div>
+    </div>
+    <div class="row2">
+      <div class="card">
+        <h2>Trending hashtags</h2>
+        <p class="hint">Top tags in the window, with momentum vs the previous half.</p>
+        <div class="bars" id="tags"></div>
+      </div>
+      <div class="card">
+        <h2>Tracked keywords</h2>
+        <p class="hint">Mentions and sentiment per keyword you track.</p>
+        <div class="tw"><table id="kwTable"><thead><tr><th>Keyword</th><th class="num">Mentions</th><th class="num">Net sent.</th><th class="num">Eng.</th></tr></thead><tbody></tbody></table></div>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Platform performance</h2>
+      <p class="hint">Averages per post in the window.</p>
+      <div class="tw"><table id="perf"><thead><tr><th>Platform</th><th class="num">Posts</th><th class="num">Avg likes</th><th class="num">Avg shares</th><th class="num">Avg comments</th><th class="num">Eng. rate</th><th class="num">Net sent.</th></tr></thead><tbody></tbody></table></div>
+    </div>
+  </div>
+  <div class="col">
+    <div class="card">
+      <h2>Alerts</h2>
+      <p class="hint">Spikes (volume above mean + 2σ) and negative-sentiment surges.</p>
+      <div class="alerts" id="alerts"><div class="empty">No alerts yet. The detector needs about 20 seconds of history.</div></div>
+    </div>
+    <div class="card">
+      <h2>Live feed</h2>
+      <p class="hint">Newest first · <span id="feedCount">0</span> shown</p>
+      <div class="feed" id="feed" aria-live="off"></div>
+    </div>
+  </div>
+</div>
+<footer>Pulseboard · Experiment 8 – Real-time Social Media Dashboard · Aditya Pradhan · 23108A0010 · EXCS A<br>Feed source: built-in stream generator (posts are generated in the browser; no account data is collected).</footer>
+</div>
+
+<script>
+(()=>{
+const PLATFORMS=[
+ {id:"X",name:"X",w:.32,lk:[20,3],sh:[6,2.4],cm:[4,2],rc:[900,3]},
+ {id:"IG",name:"Instagram",w:.26,lk:[60,3],sh:[5,2],cm:[8,2],rc:[1400,3]},
+ {id:"YT",name:"YouTube",w:.14,lk:[90,3.5],sh:[8,2.5],cm:[15,2.4],rc:[3000,3.5]},
+ {id:"LI",name:"LinkedIn",w:.12,lk:[30,2.6],sh:[3,2],cm:[5,2],rc:[700,2.6]},
+ {id:"RD",name:"Reddit",w:.16,lk:[40,3.2],sh:[1,1.6],cm:[12,2.6],rc:[1100,3]}
+];
+const colorVar=["--p1","--p2","--p3","--p4","--p5"];
+const TOPICS={
+ "#AI":["new AI model","AI tools at work","generative AI","AI chip launch","AI regulation"],
+ "#Cricket":["the India vs Australia match","IPL auction","that last-over finish","the new captain","Test series"],
+ "#Startups":["seed funding round","startup layoffs","product launch","founder interview","unicorn valuation"],
+ "#Climate":["heatwave forecast","EV sales","solar capacity","plastic ban","monsoon update"],
+ "#Gaming":["the new console","esports finals","game trailer","patch notes","server outage"],
+ "#Budget":["income tax slabs","fuel prices","GST changes","education spending","railway budget"]
+};
+const POSW=["love","great","amazing","excellent","happy","awesome","brilliant","impressive","win","best","exciting","proud","useful","smooth","fantastic","good"];
+const NEGW=["hate","terrible","awful","bad","worst","angry","disappointed","broken","scam","fail","slow","sad","overpriced","annoying","useless","delay"];
+const POS_T=["Honestly {w} news about {t} {h}","{t} is {w}, didn't expect this {h}","So {w} to see {t} today {h}","Just tried {t}. {W}! {h}","{W} update on {t} {h} {h2}"];
+const NEG_T=["{t} is {w}, really {w2} {h}","Feeling {w} about {t} {h}","Why is {t} so {w}? {h}","{W} experience with {t} {h} {h2}","Another {w} day thanks to {t} {h}"];
+const NEU_T=["Thread on {t} {h}","Live coverage: {t} {h} {h2}","What do you think about {t}? {h}","Reading up on {t} {h}","Quick summary of {t} {h}"];
+const ADJ=["blue","tiny","urban","quiet","neon","swift","lucky","cosmic","daily","pixel","chai","mango","retro","solar"];
+const NOUN=["coder","fan","writer","trader","gamer","analyst","nomad","chef","student","dev","pilot","owl"];
+
+const $=id=>document.getElementById(id);
+const rnd=Math.random;
+const pick=a=>a[(rnd()*a.length)|0];
+function logn(m,s){const u=1-rnd(),v=rnd();const z=Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);return Math.max(0,Math.round(m*Math.exp(Math.log(s)*z*.6)));}
+function pois(l){let L=Math.exp(-l),k=0,p=1;do{k++;p*=rnd();}while(p>L);return k-1;}
+function cv(name){return getComputedStyle(document.documentElement).getPropertyValue(name).trim();}
+const fmt=n=>n>=1e6?(n/1e6).toFixed(2)+"M":n>=1e4?(n/1e3).toFixed(1)+"k":Math.round(n).toLocaleString("en-IN");
+
+let tracked=["#AI","#Cricket","#Budget"];
+let enabled=new Set(PLATFORMS.map(p=>p.id));
+let running=true,speed=1,win=60,t0=Date.now();
+let posts=[];          // all posts kept for max window (300s)
+let secBuckets=[];     // per second: {ts, byP:{}, pos,neg,neu}
+let total=0,alerts=[],lastAlertAt={};
+let simTime=Date.now();
+
+// ---- sentiment: lexicon scoring (real computation on post text) ----
+function sentiment(text){
+  const w=text.toLowerCase().replace(/[^a-z#\s']/g," ").split(/\s+/);
+  let s=0;for(let i=0;i<w.length;i++){const neg=i>0&&(w[i-1]==="not"||w[i-1]==="never");
+    if(POSW.includes(w[i]))s+=neg?-1:1; if(NEGW.includes(w[i]))s+=neg?1:-1;}
+  return s>0?"pos":s<0?"neg":"neu";
+}
+function makePost(ts,surge){
+  let r=rnd(),acc=0,pl=PLATFORMS[0];for(const p of PLATFORMS){acc+=p.w;if(r<=acc){pl=p;break;}}
+  const pool=Object.keys(TOPICS);
+  const custom=tracked.filter(k=>!TOPICS[k]);
+  let tag=rnd()<.55?pick(tracked):pick(pool);
+  if(surge&&rnd()<.6)tag=surge.tag;
+  const topic=TOPICS[tag]?pick(TOPICS[tag]):tag.replace("#","");
+  const bias=surge&&tag===surge.tag?surge.mood:null;
+  let mood=bias&&rnd()<.7?bias:(r=rnd())<.42?"pos":r<.72?"neu":"neg";
+  const T=mood==="pos"?POS_T:mood==="neg"?NEG_T:NEU_T, W=mood==="pos"?POSW:NEGW;
+  const w=pick(W),w2=pick(W);
+  const h2pool=pool.concat(custom).filter(x=>x!==tag);
+  const hashtag=tag.startsWith("#")?tag:"#"+tag.replace(/\s+/g,"");
+  const text=pick(T).replace("{t}",topic).replace("{w}",w).replace("{w2}",w2).replace("{W}",w[0].toUpperCase()+w.slice(1)).replace("{h}",hashtag).replace("{h2}",rnd()<.5?pick(h2pool):"");
+  const k=surge&&tag===surge.tag?1.8:1;
+  return {ts,pl:pl.id,user:"@"+pick(ADJ)+"_"+pick(NOUN)+((rnd()*99)|0),text:text.trim(),tag:hashtag,
+    tags:(text.match(/#\w+/g)||[]),likes:logn(pl.lk[0]*k,pl.lk[1]),shares:logn(pl.sh[0]*k,pl.sh[1]),comments:logn(pl.cm[0]*k,pl.cm[1]),
+    reach:logn(pl.rc[0]*k,pl.rc[1])+50,sent:sentiment(text)};
+}
+let surge=null;
+function tick(){
+  simTime+=1000;
+  // occasional events: a surge on one hashtag, sometimes negative
+  if(!surge&&rnd()<.025)surge={tag:pick(tracked.concat(Object.keys(TOPICS))),mood:rnd()<.45?"neg":"pos",left:8+((rnd()*8)|0)};
+  if(surge&&--surge.left<=0)surge=null;
+  const base=3.2+Math.sin(simTime/40000)*1.1;
+  const n=pois(base*(surge?2.6:1));
+  const b={ts:simTime,byP:{},pos:0,neg:0,neu:0};PLATFORMS.forEach(p=>b.byP[p.id]=0);
+  const newPosts=[];
+  for(let i=0;i<n;i++){const p=makePost(simTime,surge);posts.push(p);newPosts.push(p);b.byP[p.pl]++;b[p.sent]++;total++;}
+  secBuckets.push(b);
+  const cut=simTime-300000;posts=posts.filter(p=>p.ts>cut);secBuckets=secBuckets.filter(x=>x.ts>cut);
+  const L=posts.filter(p=>p.ts>simTime-10000&&enabled.has(p.pl));const nn=L.length||1;
+  sentHist.push((L.filter(p=>p.sent==="pos").length-L.filter(p=>p.sent==="neg").length)/nn*100);
+  if(sentHist.length>300)sentHist.shift();
+  detect();
+  render(newPosts);
+}
+// ---- anomaly detection: z-score on per-second volume and negative share ----
+function detect(){
+  const B=secBuckets.slice(-60);if(B.length<20)return;
+  const vol=B.map(b=>sumP(b));const hist=vol.slice(0,-5),recent=vol.slice(-5);
+  const m=hist.reduce((a,c)=>a+c,0)/hist.length,sd=Math.sqrt(hist.reduce((a,c)=>a+(c-m)**2,0)/hist.length)||1;
+  const rm=recent.reduce((a,c)=>a+c,0)/recent.length;
+  const z=(rm-m)/sd;
+  if(z>2&&canAlert("spike")){
+    const last=posts.filter(p=>p.ts>simTime-5000);const top=topTags(last,1)[0];
+    pushAlert("warn",`Volume spike: ${rm.toFixed(1)} posts/s vs ${m.toFixed(1)} normal (z = ${z.toFixed(1)})${top?`, led by ${top[0]}`:""}.`);
+  }
+  const l10=posts.filter(p=>p.ts>simTime-10000&&enabled.has(p.pl));
+  if(l10.length>=15){const ng=l10.filter(p=>p.sent==="neg").length/l10.length;
+    if(ng>.45&&canAlert("neg")){const top=topTags(l10.filter(p=>p.sent==="neg"),1)[0];
+      pushAlert("crit",`Negative surge: ${(ng*100).toFixed(0)}% of the last 10 s is negative${top?`, mostly about ${top[0]}`:""}.`);}}
+}
+function canAlert(k){if(lastAlertAt[k]&&simTime-lastAlertAt[k]<25000)return false;lastAlertAt[k]=simTime;return true;}
+function pushAlert(kind,msg){alerts.unshift({kind,msg,ts:simTime});alerts=alerts.slice(0,6);}
+const sumP=b=>PLATFORMS.reduce((a,p)=>a+(enabled.has(p.id)?b.byP[p.id]:0),0);
+function topTags(list,n){const c={};list.forEach(p=>p.tags.forEach(t=>c[t]=(c[t]||0)+1));return Object.entries(c).sort((a,b)=>b[1]-a[1]).slice(0,n);}
+
+// ---- rendering ----
+function setDelta(el,cur,prev,suffix=""){
+  if(!prev){el.textContent=" ";el.className="d";return;}
+  const ch=(cur-prev)/prev*100;el.textContent=(ch>=0?"▲ ":"▼ ")+Math.abs(ch).toFixed(1)+"% vs prev. window"+suffix;
+  el.className="d "+(ch>=0?"up":"down");
+}
+function render(newPosts){
+  $("clock").textContent=new Date(simTime).toLocaleTimeString("en-IN",{hour12:false});
+  const W=posts.filter(p=>p.ts>simTime-win*1000&&enabled.has(p.pl));
+  const Wprev=posts.filter(p=>p.ts<=simTime-win*1000&&p.ts>simTime-2*win*1000&&enabled.has(p.pl));
+  const secs=Math.min(win,secBuckets.length)||1;
+  const rate=W.length/secs*60;
+  $("k-rate").textContent=rate.toFixed(0);
+  if(secBuckets.length>=2*win)setDelta($("k-rate-d"),W.length,Wprev.length);else{$("k-rate-d").textContent="trend after "+(2*win)+" s";$("k-rate-d").className="d";}
+  $("k-total").textContent=fmt(total);
+  const eng=W.reduce((a,p)=>a+p.likes+p.shares+p.comments,0),reach=W.reduce((a,p)=>a+p.reach,0);
+  $("k-eng").textContent=fmt(eng);$("k-reach").textContent=fmt(reach);
+  $("k-er").textContent=reach?(eng/reach*100).toFixed(2)+"%":"—";
+  const cnt={pos:0,neg:0,neu:0};W.forEach(p=>cnt[p.sent]++);const N=W.length||1;
+  const ns=(cnt.pos-cnt.neg)/N*100;
+  const nsEl=$("k-ns");nsEl.textContent=(ns>0?"+":"")+ns.toFixed(0);nsEl.className="v "+(ns>=0?"up":"down");
+  const sb=$("sentBar").children;sb[0].style.flexGrow=cnt.pos;sb[1].style.flexGrow=cnt.neu;sb[2].style.flexGrow=cnt.neg;
+  $("sPos").textContent="Positive "+(cnt.pos/N*100).toFixed(0)+"%";$("sNeu").textContent="Neutral "+(cnt.neu/N*100).toFixed(0)+"%";$("sNeg").textContent="Negative "+(cnt.neg/N*100).toFixed(0)+"%";
+  drawVolume();drawSent();renderSOV(W);renderTags(W);renderKw(W);renderPerf(W);renderAlerts();
+  if(newPosts)renderFeed(newPosts);
+}
+function canvasCtx(c){const r=window.devicePixelRatio||1,w=c.clientWidth,h=+c.getAttribute("height");
+  c.width=w*r;c.height=h*r;c.style.height=h+"px";const x=c.getContext("2d");x.scale(r,r);return [x,w,h];}
+function drawVolume(){
+  const c=$("cVol");const [x,w,h]=canvasCtx(c);const B=secBuckets.slice(-win);
+  const padL=34,padB=20,padT=8,pw=w-padL-6,ph=h-padB-padT;
+  // 5-second rolling mean per platform so the stacked area reads as a trend, not noise
+  const stacks=B.map((b,i)=>{let a=0;const lo=Math.max(0,i-4),n=i-lo+1;return PLATFORMS.map(p=>{let s=0;for(let j=lo;j<=i;j++)s+=B[j].byP[p.id];a+=enabled.has(p.id)?s/n:0;return a;});});
+  const raw=Math.max(4,...stacks.map(s=>s[s.length-1]));const step=raw>12?5:2;const max=Math.ceil(raw/step)*step;
+  x.font="11px "+cv("--font-data");x.fillStyle=cv("--muted");x.strokeStyle=cv("--line");x.lineWidth=1;
+  for(let v=0;v<=max;v+=step){const y=padT+ph-v/max*ph;x.beginPath();x.moveTo(padL,y);x.lineTo(padL+pw,y);x.stroke();x.textAlign="right";x.fillText(v,padL-6,y+4);}
+  [0,.5,1].forEach(f=>{x.textAlign=f===0?"left":f===1?"right":"center";x.fillText(f===1?"now":"−"+Math.round(win*(1-f))+"s",padL+f*pw,h-5);});
+  const X=i=>padL+(win<=1?0:(i+(win-B.length))/(win-1))*pw;
+  for(let k=PLATFORMS.length-1;k>=0;k--){
+    if(!enabled.has(PLATFORMS[k].id))continue;
+    const col=cv(colorVar[k]);x.beginPath();
+    B.forEach((b,i)=>{const y=padT+ph-stacks[i][k]/max*ph;i?x.lineTo(X(i),y):x.moveTo(X(i),y);});
+    x.lineTo(X(B.length-1),padT+ph);x.lineTo(X(0),padT+ph);x.closePath();
+    x.globalAlpha=.8;x.fillStyle=col;x.fill();x.globalAlpha=1;
+  }
+}
+const sentHist=[];
+function drawSent(){
+  const c=$("cSent");const [x,w,h]=canvasCtx(c);const H=sentHist.slice(-win);
+  const padL=34,padB=4,padT=6,pw=w-padL-6,ph=h-padB-padT;const Y=v=>padT+ph/2-v/100*ph/2;
+  x.font="11px "+cv("--font-data");x.fillStyle=cv("--muted");x.strokeStyle=cv("--line");x.textAlign="right";
+  [100,0,-100].forEach(v=>{x.beginPath();x.moveTo(padL,Y(v));x.lineTo(padL+pw,Y(v));x.stroke();x.fillText((v>0?"+":"")+v,padL-6,Y(v)+4);});
+  if(H.length<2)return;const X=i=>padL+(i+(win-H.length))/(win-1)*pw;
+  x.beginPath();H.forEach((v,i)=>i?x.lineTo(X(i),Y(v)):x.moveTo(X(i),Y(v)));
+  x.strokeStyle=cv("--accent");x.lineWidth=2;x.stroke();
+  const lv=H[H.length-1];x.beginPath();x.arc(X(H.length-1),Y(lv),3.5,0,7);x.fillStyle=cv("--accent");x.fill();
+}
+function barRow(name,val,pct,color,label){
+  return `<div class="bar"><span class="nm" title="${esc(name)}">${esc(name)}</span><span class="t"><b style="width:${Math.max(2,pct)}%;background:${color}"></b></span><span class="n">${label}</span></div>`;}
+function esc(s){return String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));}
+function renderSOV(W){
+  const n=W.length||1;$("sov").innerHTML=PLATFORMS.map((p,i)=>{if(!enabled.has(p.id))return"";const c=W.filter(q=>q.pl===p.id).length;
+    return barRow(p.name,c,c/n*100,`var(${colorVar[i]})`,(c/n*100).toFixed(1)+"%");}).join("");
+}
+function renderTags(W){
+  const half=simTime-win*500;const A=W.filter(p=>p.ts<=half),Bh=W.filter(p=>p.ts>half);
+  const top=topTags(W,7);if(!top.length){$("tags").innerHTML='<div class="empty">Collecting posts…</div>';return;}
+  const mx=top[0][1];const cA={},cB={};A.forEach(p=>p.tags.forEach(t=>cA[t]=(cA[t]||0)+1));Bh.forEach(p=>p.tags.forEach(t=>cB[t]=(cB[t]||0)+1));
+  $("tags").innerHTML=top.map(([t,c])=>{const a=cA[t]||0,b=cB[t]||0;const mom=a?((b-a)/a*100):100;
+    return barRow(t,c,c/mx*100,"var(--accent)",`${c} <span class="${mom>=0?"up":"down"}">${mom>=0?"▲":"▼"}</span>`);}).join("");
+}
+function renderKw(W){
+  const tb=$("kwTable").tBodies[0];
+  tb.innerHTML=tracked.map(k=>{const kl=k.toLowerCase();const m=W.filter(p=>p.text.toLowerCase().includes(kl));
+    const n=m.length;const ns=n?((m.filter(p=>p.sent==="pos").length-m.filter(p=>p.sent==="neg").length)/n*100):0;
+    const e=m.reduce((a,p)=>a+p.likes+p.shares+p.comments,0);
+    return `<tr><td>${esc(k)}</td><td class="num">${n}</td><td class="num ${ns>=0?"up":"down"}">${n?(ns>0?"+":"")+ns.toFixed(0):"—"}</td><td class="num">${fmt(e)}</td></tr>`;}).join("");
+}
+function renderPerf(W){
+  const tb=$("perf").tBodies[0];
+  tb.innerHTML=PLATFORMS.map((p,i)=>{if(!enabled.has(p.id))return"";const m=W.filter(q=>q.pl===p.id);const n=m.length||1;
+    const L=m.reduce((a,q)=>a+q.likes,0),S=m.reduce((a,q)=>a+q.shares,0),C=m.reduce((a,q)=>a+q.comments,0),R=m.reduce((a,q)=>a+q.reach,0);
+    const ns=(m.filter(q=>q.sent==="pos").length-m.filter(q=>q.sent==="neg").length)/n*100;
+    return `<tr><td><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:var(${colorVar[i]});margin-right:6px"></span>${p.name}</td><td class="num">${m.length}</td><td class="num">${(L/n).toFixed(0)}</td><td class="num">${(S/n).toFixed(1)}</td><td class="num">${(C/n).toFixed(1)}</td><td class="num">${R?((L+S+C)/R*100).toFixed(2)+"%":"—"}</td><td class="num ${ns>=0?"up":"down"}">${m.length?(ns>0?"+":"")+ns.toFixed(0):"—"}</td></tr>`;}).join("");
+}
+function renderAlerts(){
+  if(!alerts.length)return;
+  $("alerts").innerHTML=alerts.map(a=>`<div class="alert ${a.kind==="crit"?"crit":""}"><time>${new Date(a.ts).toLocaleTimeString("en-IN",{hour12:false})}</time>${esc(a.msg)}</div>`).join("");
+}
+const feedEl=$("feed");
+function renderFeed(list){
+  const frag=document.createDocumentFragment();
+  list.filter(p=>enabled.has(p.pl)).forEach(p=>{
+    const i=PLATFORMS.findIndex(q=>q.id===p.pl);const d=document.createElement("div");d.className="post";
+    d.innerHTML=`<div class="m"><span class="pf" style="color:var(${colorVar[i]})">${PLATFORMS[i].name}</span><span>${esc(p.user)}</span><span>${new Date(p.ts).toLocaleTimeString("en-IN",{hour12:false})}</span><span class="pill ${p.sent}">${p.sent==="pos"?"positive":p.sent==="neg"?"negative":"neutral"}</span></div><div class="tx"></div><div class="en"><span>♥ ${fmt(p.likes)}</span><span>↻ ${fmt(p.shares)}</span><span>${fmt(p.comments)} comments</span><span>${fmt(p.reach)} reach</span></div>`;
+    d.querySelector(".tx").textContent=p.text;frag.prepend(d);
+  });
+  feedEl.prepend(frag);while(feedEl.children.length>40)feedEl.lastChild.remove();
+  $("feedCount").textContent=feedEl.children.length;
+}
+// ---- controls ----
+function buildFilters(){
+  $("pfilters").innerHTML=PLATFORMS.map((p,i)=>`<button type="button" class="chip" aria-pressed="${enabled.has(p.id)}" data-p="${p.id}"><span class="sw" style="background:var(${colorVar[i]})"></span>${p.name}</button>`).join("");
+  $("volLegend").innerHTML=PLATFORMS.map((p,i)=>enabled.has(p.id)?`<span><i style="background:var(${colorVar[i]})"></i>${p.name}</span>`:"").join("");
+}
+$("pfilters").addEventListener("click",e=>{const b=e.target.closest("[data-p]");if(!b)return;const id=b.dataset.p;
+  if(enabled.has(id)){if(enabled.size>1)enabled.delete(id);}else enabled.add(id);buildFilters();render();});
+function buildKw(){$("kwList").innerHTML=tracked.map((k,i)=>`<span class="kw">${esc(k)}<button type="button" aria-label="Stop tracking ${esc(k)}" data-i="${i}">×</button></span>`).join("");}
+$("kwList").addEventListener("click",e=>{const b=e.target.closest("[data-i]");if(!b||tracked.length<=1)return;tracked.splice(+b.dataset.i,1);buildKw();render();});
+$("kwForm").addEventListener("submit",e=>{e.preventDefault();let v=$("kwIn").value.trim().replace(/\s+/g,"");if(!v)return;
+  if(!v.startsWith("#"))v="#"+v;if(!tracked.some(k=>k.toLowerCase()===v.toLowerCase())&&tracked.length<6)tracked.push(v);$("kwIn").value="";buildKw();render();});
+let timer=null;
+function schedule(){clearInterval(timer);if(running)timer=setInterval(tick,1000/speed);}
+$("toggle").addEventListener("click",()=>{running=!running;$("toggle").textContent=running?"Pause":"Resume";
+  $("live").classList.toggle("off",!running);$("liveTxt").textContent=running?"Live":"Paused";schedule();});
+$("speed").addEventListener("change",e=>{speed=+e.target.value;schedule();});
+$("win").addEventListener("change",e=>{win=+e.target.value;render();});
+$("reset").addEventListener("click",()=>{posts=[];secBuckets=[];sentHist.length=0;total=0;alerts=[];lastAlertAt={};feedEl.innerHTML="";
+  $("alerts").innerHTML='<div class="empty">No alerts yet. The detector needs about 20 seconds of history.</div>';simTime=Date.now();render();});
+window.addEventListener("resize",()=>render());
+window.matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change",()=>render());
+
+// warm start: 45 s of history so the page opens in a working state
+buildFilters();buildKw();
+simTime=Date.now()-45000;for(let i=0;i<45;i++){simTime+=1000;const n=pois(3.2);const b={ts:simTime,byP:{},pos:0,neg:0,neu:0};PLATFORMS.forEach(p=>b.byP[p.id]=0);
+  const np=[];for(let j=0;j<n;j++){const p=makePost(simTime,null);posts.push(p);np.push(p);b.byP[p.pl]++;b[p.sent]++;total++;}secBuckets.push(b);
+  const L=posts.filter(p=>p.ts>simTime-10000);const nn=L.length||1;sentHist.push((L.filter(p=>p.sent==="pos").length-L.filter(p=>p.sent==="neg").length)/nn*100);
+  if(i>=33)renderFeed(np);}
+render();schedule();
+})();
+</script>
+</body>
+</html>
